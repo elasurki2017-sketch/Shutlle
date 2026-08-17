@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shuttle Travel - Driver</title>
+    <style>
+        * { box-sizing: border-box; font-family: sans-serif; }
+        body { background-color: #f0f2f5; margin: 0; padding: 15px; color: #1c1e21; }
+        .header { text-align: center; margin-bottom: 20px; }
+        .header h2 { margin: 0; color: #198754; }
+        .card { background: #ffffff; border-radius: 12px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 16px; }
+        input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ced4da; border-radius: 8px; font-size: 14px; }
+        button { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer; }
+        .btn-success { background-color: #198754; color: white; }
+        .btn-primary { background-color: #0d6efd; color: white; margin-top: 10px; }
+        .btn-toggle-online { background-color: #198754; color: white; margin-top: 10px; }
+        .btn-toggle-offline { background-color: #dc3545; color: white; margin-top: 10px; }
+        .btn-clear { background-color: #6c757d; color: white; padding: 6px 12px; font-size: 12px; border-radius: 6px; width: auto; float: right; }
+        .status-badge { display: block; text-align: center; padding: 10px; border-radius: 8px; font-size: 13px; font-weight: bold; margin-top: 10px; }
+        .status-TAKEN { background-color: #e2e3e5; color: #41464b; }
+        .status-ACCEPTED { background-color: #d1e7dd; color: #0f5132; }
+        .info-row { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 8px; border-bottom: 1px dashed #eee; padding-bottom: 6px; }
+        .hidden { display: none !important; }
+        .driver-profile { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #eee; }
+        .status-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; }
+        .is-online { background-color: #198754; }
+        .is-offline { background-color: #dc3545; }
+        .history-item { border-left: 4px solid #198754; background: #f8f9fa; padding: 10px; border-radius: 6px; margin-bottom: 10px; font-size: 13px; }
+        .history-date { font-size: 11px; color: #6c757d; margin-bottom: 4px; }
+        .order-item { border: 1px solid #eee; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+        .order-item:last-child { margin-bottom: 0; }
+    </style>
+
+    <!-- Ikon Notifikasi (dipakai untuk favicon & notifikasi HP) -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='48' fill='%23198754'/%3E%3Cpath d='M25 60 L30 40 Q32 35 38 35 L62 35 Q68 35 70 40 L75 60 L75 68 Q75 72 71 72 L69 72 Q65 72 65 68 L65 65 L35 65 L35 68 Q35 72 31 72 L29 72 Q25 72 25 68 Z' fill='white'/%3E%3Ccircle cx='36' cy='65' r='6' fill='%23198754' stroke='white' stroke-width='2'/%3E%3Ccircle cx='64' cy='65' r='6' fill='%23198754' stroke='white' stroke-width='2'/%3E%3C/svg%3E">
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+</head>
+<body>
+
+    <div class="header">
+        <h2>Driver Commuter</h2>
+    </div>
+
+    <!-- MODAL REGISTRASI DRIVER -->
+    <div id="setup-container" class="card">
+        <h3 style="margin-top:0; font-size: 16px; color: #198754;">Registrasi Pengemudi</h3>
+        <input type="text" id="input-driver-name" placeholder="Nama Anda">
+        <button class="btn-success" onclick="simpanNamaDriver()" style="margin-top:10px;">Simpan & Masuk</button>
+    </div>
+
+    <!-- TAMPILAN UTAMA -->
+    <div id="main-container" class="hidden">
+        <!-- PROFIL & STATUS DRIVER -->
+        <div class="card">
+            <div class="driver-profile">
+                <div>
+                    <span style="font-size: 12px; color: #65676b;">Pengemudi:</span><br>
+                    <strong id="display-driver-name" style="font-size: 15px; color: #198754;">-</strong>
+                </div>
+                <button style="width: auto; padding: 5px 10px; font-size: 12px; background: #6c757d; color: white;" onclick="gantiNamaDriver()">Ubah</button>
+            </div>
+            <div style="font-size: 13px; font-weight: bold; margin-bottom: 5px;">
+                Status: <span id="status-indicator-icon" class="status-indicator"></span><span id="text-online-status"></span>
+            </div>
+            <button id="btn-status-toggle" onclick="toggleOnlineStatus()">Status</button>
+        </div>
+
+        <!-- PESANAN MASUK -->
+        <div class="card">
+            <h3 style="margin-top: 0; font-size: 16px;">Pesanan Masuk <span id="order-count" style="color:#65676b; font-weight: normal;"></span></h3>
+            <div id="order-content">
+                <p style="text-align: center; color: #65676b; margin: 20px 0;">Menunggu pesanan...</p>
+            </div>
+        </div>
+
+        <!-- RIWAYAT LOKAL DRIVER -->
+        <div class="card">
+            <div style="overflow: hidden; margin-bottom: 10px;">
+                <button class="btn-clear" onclick="hapusRiwayat()">Hapus Riwayat</button>
+                <h3 style="margin: 0; font-size: 16px; line-height: 28px;">Riwayat Penerimaan</h3>
+            </div>
+            <div id="history-list"></div>
+        </div>
+    </div>
+
+    <script>
+        // Konfigurasi Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyCx_fMna5DUmdfkIobXsUxxs4YEkq-yz0k",
+            authDomain: "aplikasishuttle.firebaseapp.com",
+            databaseURL: "https://aplikasishuttle-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "aplikasishuttle",
+            storageBucket: "aplikasishuttle.firebasestorage.app",
+            messagingSenderId: "895559102631",
+            appId: "1:895559102631:web:e373a31cfb5cf5f9292b82"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // --- URL WEB APP GOOGLE APPS SCRIPT (untuk simpan data ke Spreadsheet) ---
+        // Ganti dengan URL hasil Deploy > Web app dari Apps Script Anda
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzkX1qqGjedMUFnhfvEhQSGeINI_REhzXZGWTdor82LmFDBR1s0ZeOqOBvcreRPrgdyuw/exec";
+
+        // --- IKON UNTUK NOTIFIKASI (SVG, tidak perlu file terpisah) ---
+        const NOTIF_ICON = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='48' fill='%23198754'/%3E%3Cpath d='M25 60 L30 40 Q32 35 38 35 L62 35 Q68 35 70 40 L75 60 L75 68 Q75 72 71 72 L69 72 Q65 72 65 68 L65 65 L35 65 L35 68 Q35 72 31 72 L29 72 Q25 72 25 68 Z' fill='white'/%3E%3Ccircle cx='36' cy='65' r='6' fill='%23198754' stroke='white' stroke-width='2'/%3E%3Ccircle cx='64' cy='65' r='6' fill='%23198754' stroke='white' stroke-width='2'/%3E%3C/svg%3E";
+
+        // --- MINTA IZIN NOTIFIKASI DARI HP/BROWSER ---
+        function mintaIzinNotifikasi() {
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+        }
+
+        // --- TAMPILKAN NOTIFIKASI DI LAYAR HP (DENGAN IKON) ---
+        function tampilkanNotifikasiPesanan(jumlahBaru) {
+            if (!('Notification' in window) || Notification.permission !== 'granted') return;
+            try {
+                const notif = new Notification('Pesanan Baru Masuk!', {
+                    body: jumlahBaru > 1 ? `${jumlahBaru} pesanan baru menunggu dijemput.` : 'Ada 1 pesanan baru menunggu dijemput.',
+                    icon: NOTIF_ICON,
+                    badge: NOTIF_ICON,
+                    tag: 'pesanan-baru-' + Date.now(),
+                    vibrate: [200, 100, 200]
+                });
+                notif.onclick = function() {
+                    window.focus();
+                    notif.close();
+                };
+            } catch (e) {
+                console.log('Notifikasi Error:', e);
+            }
+        }
+
+        // --- SUARA NOTIFIKASI PANJANG & KERAS (WEB AUDIO API) ---
+        function playLoudAlarm() {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                const audioCtx = new AudioContext();
+
+                // Pola nada sirene / alarm (3 Kali Bip Keras)
+                const times = [0, 0.4, 0.8]; 
+                times.forEach(delay => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+
+                    osc.type = 'sawtooth'; // Gelombang sawtooth agar suara lebih keras & menusuk
+                    osc.frequency.setValueAtTime(880, audioCtx.currentTime + delay); // Nada A5 (tinggi)
+
+                    // Volume Keras (0.8)
+                    gain.gain.setValueAtTime(0.8, audioCtx.currentTime + delay);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + delay + 0.3);
+
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+
+                    osc.start(audioCtx.currentTime + delay);
+                    osc.stop(audioCtx.currentTime + delay + 0.3);
+                });
+            } catch (e) {
+                console.log("Audio Error:", e);
+            }
+        }
+
+        let currentDriverName = localStorage.getItem('DRIVER_NAME') || '';
+        let isOnline = localStorage.getItem('DRIVER_ONLINE_STATUS') !== 'OFFLINE';
+        let orderListener = null;
+        let activeOrdersData = {}; // Menyimpan semua pesanan masuk, key = user_id pengguna
+        let knownPendingIds = []; // Melacak pesanan PENDING yang sudah pernah muncul (untuk alarm)
+
+        window.onload = function() {
+            initApp();
+            tampilkanRiwayat();
+            mintaIzinNotifikasi();
+        };
+
+        function initApp() {
+            if (!currentDriverName) {
+                document.getElementById('setup-container').classList.remove('hidden');
+                document.getElementById('main-container').classList.add('hidden');
+            } else {
+                document.getElementById('setup-container').classList.add('hidden');
+                document.getElementById('main-container').classList.remove('hidden');
+                document.getElementById('display-driver-name').innerText = currentDriverName;
+                updateOnlineUI();
+            }
+        }
+
+        function toggleOnlineStatus() {
+            mintaIzinNotifikasi();
+            isOnline = !isOnline;
+            localStorage.setItem('DRIVER_ONLINE_STATUS', isOnline ? 'ONLINE' : 'OFFLINE');
+            updateOnlineUI();
+        }
+
+        function updateOnlineUI() {
+            const statusText = document.getElementById('text-online-status');
+            const statusIcon = document.getElementById('status-indicator-icon');
+            const toggleBtn = document.getElementById('btn-status-toggle');
+            
+            if (isOnline) {
+                statusText.innerText = "ONLINE"; statusText.style.color = "#198754";
+                statusIcon.className = "status-indicator is-online";
+                toggleBtn.innerText = "Beralih ke OFFLINE"; toggleBtn.className = "btn-toggle-offline";
+                listenOrders();
+            } else {
+                statusText.innerText = "OFFLINE"; statusText.style.color = "#dc3545";
+                statusIcon.className = "status-indicator is-offline";
+                toggleBtn.innerText = "Beralih ke ONLINE"; toggleBtn.className = "btn-toggle-online";
+                if (orderListener) db.ref('pesanan_aktif').off('value', orderListener);
+                document.getElementById('order-content').innerHTML = `<p style="text-align: center; color: #dc3545; padding: 10px;">Anda sedang OFFLINE.</p>`;
+                document.getElementById('order-count').innerText = '';
+            }
+        }
+
+        function listenOrders() {
+            if (orderListener) db.ref('pesanan_aktif').off('value', orderListener);
+            orderListener = db.ref('pesanan_aktif').on('value', (snapshot) => {
+                const data = snapshot.val();
+
+                // Setiap pesanan tersimpan terpisah per pengguna (key = user_id),
+                // sehingga pesanan dari banyak pengguna bisa muncul sekaligus di sini.
+                // Hanya pesanan yang sudah memiliki ID valid yang ditampilkan.
+                const orderKeys = data ? Object.keys(data).filter(key => data[key] && data[key].id) : [];
+
+                // Bunyikan ALARM KERAS hanya untuk pesanan PENDING yang baru muncul
+                const currentPendingIds = orderKeys.filter(key => data[key].status === 'PENDING');
+                const idPesananBaru = currentPendingIds.filter(id => !knownPendingIds.includes(id));
+                if (idPesananBaru.length > 0) {
+                    playLoudAlarm();
+                    tampilkanNotifikasiPesanan(idPesananBaru.length);
+                }
+                knownPendingIds = currentPendingIds;
+
+                activeOrdersData = {};
+                orderKeys.forEach(key => { activeOrdersData[key] = data[key]; });
+
+                renderOrderList();
+            });
+        }
+
+        function renderOrderList() {
+            const container = document.getElementById('order-content');
+            const countLabel = document.getElementById('order-count');
+            const orderKeys = Object.keys(activeOrdersData);
+
+            if (orderKeys.length === 0) {
+                countLabel.innerText = '';
+                container.innerHTML = `<p style="text-align: center; color: #65676b; margin: 20px 0;">Tidak ada pesanan.</p>`;
+                return;
+            }
+
+            countLabel.innerText = `(${orderKeys.length})`;
+
+            // Cek apakah pengemudi ini sudah mengambil satu pesanan yang belum selesai
+            const sudahAmbilPesanan = orderKeys.some(key => activeOrdersData[key].status === 'ACCEPTED' && activeOrdersData[key].driver === currentDriverName);
+
+            let html = '';
+            orderKeys.forEach(key => {
+                const pesanan = activeOrdersData[key];
+                let actionArea = '';
+
+                if (pesanan.status === 'PENDING') {
+                    if (sudahAmbilPesanan) {
+                        actionArea = `<div class="status-badge status-TAKEN">Selesaikan pesanan Anda saat ini terlebih dahulu</div>`;
+                    } else {
+                        actionArea = `<button class="btn-success" onclick="terimaPesanan('${key}')">Terima Penjemputan</button>`;
+                    }
+                } else if (pesanan.driver === currentDriverName) {
+                    actionArea = `<div class="status-badge status-ACCEPTED">ANDA MENGAMBIL PESANAN INI</div><button class="btn-primary" onclick="selesaiPesanan('${key}')">Selesaikan Penjemputan</button>`;
+                } else {
+                    actionArea = `<div class="status-badge status-TAKEN">DITERIMA OLEH ${(pesanan.driver || '-').toUpperCase()}</div>`;
+                }
+
+                html += `
+                    <div class="order-item">
+                        <div class="info-row"><span>ID:</span><strong>${pesanan.id}</strong></div>
+                        <div class="info-row"><span>Waktu Pesan:</span><strong>${pesanan.waktu_pesan || '-'}</strong></div>
+                        <div class="info-row"><span>Penumpang:</span><strong>${pesanan.user_name || 'Penumpang'}</strong></div>
+                        <div class="info-row"><span>Jumlah Penumpang:</span><strong>${pesanan.jumlah_penumpang || '-'}</strong></div>
+                        <div class="info-row"><span>Jemput:</span><strong>${pesanan.pickup}</strong></div>
+                        <div class="info-row"><span>Tujuan:</span><strong>${pesanan.dropoff}</strong></div>
+                        ${actionArea}
+                    </div>`;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function terimaPesanan(key) {
+            // Pengemudi hanya boleh mengambil satu pesanan untuk diselesaikan dalam satu waktu
+            const sudahAmbilPesanan = Object.values(activeOrdersData).some(o => o.status === 'ACCEPTED' && o.driver === currentDriverName);
+            if (sudahAmbilPesanan) {
+                alert("Anda hanya bisa mengambil satu pesanan. Selesaikan pesanan Anda saat ini terlebih dahulu.");
+                return;
+            }
+            db.ref('pesanan_aktif/' + key).update({
+                status: 'ACCEPTED', 
+                driver: currentDriverName
+            }); 
+        }
+
+        function selesaiPesanan(key) {
+            const pesanan = activeOrdersData[key];
+            if (!pesanan) return;
+
+            if (confirm("Selesaikan penjemputan ini?")) {
+                // 1. Simpan ke Riwayat Lokal HP Driver
+                simpanKeRiwayatLokal(pesanan); 
+                
+                // 2. Simpan Permanen ke Firebase Database
+                simpanKeFirebaseHistory(pesanan);
+
+                // 3. Simpan ke Google Spreadsheet
+                simpanKeSpreadsheet(pesanan);
+
+                // 4. Hapus hanya pesanan ini dari daftar pesanan aktif
+                //    (pesanan pengguna lain yang belum selesai tetap muncul)
+                db.ref('pesanan_aktif/' + key).remove();
+            }
+        }
+
+        // --- FUNGSI RIWAYAT PERMANEN DI FIREBASE ---
+        function simpanKeFirebaseHistory(data) {
+            if (!data) return;
+            const historyId = 'HIST-' + Date.now();
+            
+            db.ref('riwayat_pesanan/' + historyId).set({
+                id_pesanan: data.id || '-',
+                penumpang: data.user_name || 'Penumpang',
+                driver: currentDriverName,
+                jemput: data.pickup,
+                tujuan: data.dropoff,
+                waktu_selesai: new Date().toLocaleString('id-ID')
+            });
+        }
+
+        // --- FUNGSI SIMPAN DATA PESANAN KE GOOGLE SPREADSHEET ---
+        function simpanKeSpreadsheet(data) {
+            if (!data) return;
+            if (!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL.includes("GANTI_DENGAN_ID_ANDA")) {
+                console.log("URL Google Apps Script belum diatur, lewati simpan ke Spreadsheet.");
+                return;
+            }
+
+            const payload = {
+                id: data.id || '-',
+                penumpang: data.user_name || 'Penumpang',
+                jumlah_penumpang: data.jumlah_penumpang || '-',
+                driver: currentDriverName,
+                jemput: data.pickup,
+                tujuan: data.dropoff,
+                waktu_pesan: data.waktu_pesan || '-',
+                waktu_selesai: new Date().toLocaleString('id-ID')
+            };
+
+            fetch(GOOGLE_SCRIPT_URL, {
+                method: 'POST',
+                mode: 'no-cors', // Apps Script tidak mengirim header CORS, respons tidak bisa dibaca tapi data tetap terkirim
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify(payload)
+            }).catch(err => console.log("Gagal simpan ke Spreadsheet:", err));
+        }
+
+        // --- FUNGSI RIWAYAT LOKAL ---
+        function simpanKeRiwayatLokal(data) {
+            let history = JSON.parse(localStorage.getItem('DRIVER_HISTORY') || '[]');
+            data.waktu_selesai = new Date().toLocaleString('id-ID');
+            history.unshift(data);
+            localStorage.setItem('DRIVER_HISTORY', JSON.stringify(history));
+            tampilkanRiwayat();
+        }
+
+        function tampilkanRiwayat() {
+            const list = document.getElementById('history-list');
+            let history = JSON.parse(localStorage.getItem('DRIVER_HISTORY') || '[]');
+            list.innerHTML = history.length === 0 ? '<p style="text-align:center; color:#999; font-size:12px;">Belum ada riwayat.</p>' : '';
+            
+            history.forEach(item => {
+                list.innerHTML += `
+                    <div class="history-item">
+                        <div class="history-date">📅 ${item.waktu_selesai}</div>
+                        <div style="font-weight: bold; margin-bottom: 4px;">👤 ${item.user_name || 'Penumpang'}</div>
+                        <div>📍 ${item.pickup} ➔ 🏁 ${item.dropoff}</div>
+                    </div>`;
+            });
+        }
+
+        function hapusRiwayat() {
+            if(confirm("Hapus semua riwayat lokal?")) { 
+                localStorage.removeItem('DRIVER_HISTORY'); 
+                tampilkanRiwayat(); 
+            }
+        }
+
+        function simpanNamaDriver() { 
+            const name = document.getElementById('input-driver-name').value.trim();
+            if(name) { 
+                localStorage.setItem('DRIVER_NAME', name); 
+                location.reload(); 
+            }
+        }
+
+        function gantiNamaDriver() { 
+            localStorage.removeItem('DRIVER_NAME'); 
+            location.reload(); 
+        }
+    </script>
+</body>
+</html>
